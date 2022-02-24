@@ -1,0 +1,18 @@
+﻿queenID,individual queen identifier
+pullDay,date queen was pulled as callow from natal colony
+qNatCol,queen natal colony identifier
+WNatCol,worker natal colony identifiers
+start,start date of the nest. Day on which the queen was placed in the nestbox
+eggDate,date that eggs were first observed in the nest
+collDate,date the queen was collected (either into a second nest or into a -80 freezer)
+daysToEggs,number of days between start date and eggDate
+socTreat,"social treatment (whether the queen had 5 workers added to the nest - social, or not - solitary)"
+history,"social history - whether the queen was previously social, previously solitary, or NA (if first nest)"
+nest,first or second nest
+nEggs,number of eggs in the nest on the day of collection
+nHealthLarvae,number of healthy (non black) larvae in the nest on the day of collection
+nPupae,number of pupae in the nest on the day of collection
+nMales,number of adult males in the nest on the day of collection
+nAllBrood,"total number of brood (sum of eggs, larvae, pupae, males) in the nest on the day of collection"
+daysToDeath,number of days the queen survived from the start date until death. Value of 60 indicates the queen survived to collection
+NOTES,notes

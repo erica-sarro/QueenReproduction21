@@ -1,0 +1,77 @@
+﻿queenID,pullDay,qNatCol,WNatCol,start,eggDate,collDate,daysToEggs,socTreat,history,nest,nEggs,nHealthLarvae,nPupae,nMales,nAllBrood,daysToDeath,NOTES
+EQ001,3/14/18,MF1,SG3 SG3 SG2 SG2 MF2 (SG2 ES5 ES6 ES6 ES6),3/27/18,4/3/18,4/25/18,8,Social,First,First,20,5,5,0,30,60,
+EQ001,3/14/18,MF1,SG3 SG3 SG2 SG2 MF2 (SG2 ES5 ES6 ES6 ES6),4/25/18,4/29/18,5/21/18,5,Social,WasSocial,Second,35,1,3,0,39,60,all 3 pupae are actually late larvae in cocoons
+EQ002,3/15/18,MF1,SG3 SG2 SG2 SG3 SG1 (SG3),3/28/18,4/6/18,4/30/18,9,Social,First,First,16,33,9,5,63,60,
+EQ002,3/15/18,MF1,,4/30/18,5/3/18,5/25/18,4,Solitary,WasSocial,Second,7,3,0,0,10,60,
+EQ003,3/15/18,MF1,,3/28/18,4/30/18,5/22/18,33,Solitary,First,First,6,4,0,0,10,60,
+EQ003,3/15/18,MF1,,5/22/18,5/25/18,6/18/18,3,Social,WasSolitary,Second,12,74,26,0,112,60,
+EQ004,3/15/18,MF1,SG2 SG3 SG1 SG2 SG3 (ES6),3/28/18,4/5/18,4/27/18,9,Social,First,First,20,22,0,0,42,60,
+EQ004,3/15/18,MF1,SG2 SG3 SG1 SG2 SG3 (ES6),4/27/18,5/2/18,5/24/18,5,Social,WasSocial,Second,59,2,9,0,70,60,
+EQ007,3/16/18,MF1,,3/29/18,NA,4/26/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,28,died day 28
+EQ008,3/19/18,MF1,SG2 SG2 SG1 SG1 SG3 (ES5 ES5 WQ2),4/3/18,4/10/18,5/2/18,8,Social,First,First,25,14,4,0,43,60,
+EQ008,3/19/18,MF1,SG2 SG2 SG1 SG1 SG3 (ES5 ES5 WQ2),5/2/18,5/3/18,5/25/18,2,Social,WasSocial,Second,22,6,0,0,28,60,
+EQ009,3/21/18,MF1,SG3 SG3 SG1 SG2 SG2 (ES6),4/3/18,4/10/18,5/2/18,8,Social,First,First,25,11,5,0,41,60,
+EQ009,3/21/18,MF1,,5/2/18,5/8/18,5/30/18,7,Solitary,WasSocial,Second,1,0,0,0,1,60,egg dead
+EQ010,3/21/18,MF1,,4/3/18,NA,4/20/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,17,died day 17
+EQ011,3/21/18,MF1,,4/3/18,NA,6/8/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,60,culled day 66
+EQ013,3/23/18,MF1,,4/5/18,NA,5/7/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,32,died day 32
+EQ017,3/28/18,MF2,,4/10/18,NA,4/17/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,7,died day 7
+EQ018,3/28/18,MF1,,4/10/18,5/11/18,6/2/18,31,Solitary,First,First,0,3,0,0,3,60,
+EQ018,3/28/18,MF1,,6/2/18,6/4/18,6/26/18,2,Social,WasSolitary,Second,37,46,6,0,89,60,many black or partially black larvae and pupae
+EQ019,3/28/18,MF1,,4/10/18,NA,4/18/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,8,died day 8
+EQ020,3/29/18,MF2,,4/11/18,5/7/18,5/29/18,26,Solitary,First,First,27,7,1,0,35,60,
+EQ020,3/29/18,MF2,,5/29/18,6/1/18,6/25/18,3,Solitary,WasSolitary,Second,0,8,0,0,8,60,many black or partially black larvae and pupae
+EQ021,3/29/18,MF2,,4/11/18,4/30/18,5/22/18,19,Solitary,First,First,41,9,0,0,50,60,
+EQ021,3/29/18,MF2,,5/22/18,5/23/18,6/14/18,1,Social,WasSolitary,Second,25,36,23,0,84,60,
+EQ022,3/29/18,MF1,,4/11/18,4/26/18,5/18/18,16,Solitary,First,First,0,7,18,0,25,60,6 of the 18 pupae are actually late larvae in cocoons
+EQ022,3/29/18,MF1,,5/17/18,5/23/18,6/14/18,6,Solitary,WasSolitary,Second,18,4,2,0,24,60,
+EQ023,3/29/18,MF1,,4/11/18,NA,5/4/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,23,died day 23
+EQ024,3/29/18,MF1,,4/11/18,NA,6/19/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,60,culled day 38
+EQ025,3/29/18,MF2,,4/11/18,4/30/18,5/22/18,19,Solitary,First,First,16,5,0,0,21,60,
+EQ025,3/29/18,MF2,,4/30/18,5/25/18,6/18/18,25,Solitary,WasSolitary,Second,13,23,2,0,38,60,
+EQ026,4/3/18,SG3,,4/16/18,5/11/18,6/2/18,25,Solitary,First,First,39,5,3,0,47,60,
+EQ026,4/3/18,SG3,,6/2/18,6/4/18,6/26/18,2,Social,WasSolitary,Second,19,52,19,0,90,60,lost one small larva on floor
+EQ027,4/3/18,SG3,,4/16/18,5/4/18,5/26/18,18,Solitary,First,First,31,7,1,0,39,60,
+EQ027,4/3/18,SG3,,5/26/18,5/30/18,6/21/18,4,Solitary,WasSolitary,Second,20,15,0,0,35,60,
+EQ028,4/5/18,SG1,ES5 ES5 ES6 ES6 ES7,4/18/18,4/26/18,5/18/18,9,Social,First,First,21,1,11,0,33,60,
+EQ028,4/5/18,SG1,,5/18/18,NA,7/16/18,NA,Solitary,WasSocial,Second,NA,NA,NA,NA,NA,58,died 2 months after brood + workers taken
+EQ029,4/5/18,SG3,ES5 ES5 ES6 ES6 ES7,4/18/18,4/26/18,5/18/18,9,Social,First,First,28,26,2,0,56,60,
+EQ029,4/5/18,SG3,ES5 ES5 ES6 ES6 ES7,5/18/18,5/21/18,6/12/18,3,Social,WasSocial,Second,23,41,18,8,90,60,
+EQ032,4/5/18,SG3,ES5 ES5 ES6 ES7 ES7,4/18/18,4/26/18,5/18/18,8,Social,First,First,37,24,13,0,74,60,
+EQ032,4/5/18,SG3,,5/18/18,5/21/18,6/12/18,3,Solitary,WasSocial,Second,17,14,NA,0,31,60,
+EQ034,4/6/18,SG1,ES6 ES6 ES7 ES7 ES5,4/19/18,4/26/18,5/18/18,8,Social,First,First,30,7,1,0,38,60,
+EQ034,4/6/18,SG1,ES6 ES6 ES7 ES7 ES5,5/18/18,5/21/18,6/12/18,3,Social,WasSocial,Second,28,24,19,2,73,60,
+EQ035,4/6/18,SG3,ES6 ES6 ES7 ES5 ES5,4/19/18,4/26/18,5/18/18,8,Social,First,First,37,20,12,0,69,60,
+EQ035,4/6/18,SG3,,5/18/18,5/21/18,6/12/18,3,Solitary,WasSocial,Second,29,30,7,0,66,60,
+EQ038,4/12/18,SG1,,4/25/18,5/3/18,5/25/18,8,Solitary,First,First,,,,,,60,
+EQ038,4/12/18,SG1,,5/25/18,NA,8/30/18,NA,Solitary,WasSolitary,Second,,,,,,60,
+EQ039,4/12/18,SG2,ES7 ES7 ES6 ES6 ES5,4/25/18,5/3/18,5/25/18,9,Social,First,First,39,46,6,0,91,60,
+EQ039,4/12/18,SG2,ES7 ES7 ES6 ES6 ES5,5/25/18,5/28/18,6/19/18,3,Social,WasSocial,Second,19,55,17,0,91,60,
+EQ040,4/12/18,SG3,ES7 ES7 ES6 ES5 ES5,4/25/18,4/30/18,5/22/18,5,Social,First,First,38,20,9,0,67,60,
+EQ040,4/12/18,SG3,,5/22/18,6/27/18,7/19/18,36,Solitary,WasSocial,Second,0,2,0,0,2,60,
+EQ041,4/12/18,SG3,,4/25/18,6/13/18,7/5/18,49,Solitary,First,First,8,3,0,0,11,60,
+EQ041,4/12/18,SG3,,7/5/18,7/6/18,7/28/18,1,Solitary,WasSolitary,Second,2,0,0,0,2,60,
+EQ042,4/12/18,SG3,ES7 ES7 ES6 ES6 ES5,4/25/18,5/2/18,5/24/18,7,Social,First,First,41,17,15,0,73,60,
+EQ042,4/12/18,SG3,ES7 ES7 ES6 ES6 ES5,5/24/18,5/25/18,6/18/18,1,Social,WasSocial,Second,45,52,15,2,114,60,
+EQ043,4/19/18,SG3,ES5 ES5 ES6 ES7 ES7,5/2/18,5/9/18,5/31/18,7,Social,First,First,34,15,24,0,73,60,
+EQ043,4/19/18,SG3,,5/31/18,6/4/18,6/26/18,4,Solitary,WasSocial,Second,17,2,3,0,22,60,
+EQ044,4/19/18,SG3,,5/2/18,NA,6/29/18,NA,Solitary,First,First,NA,NA,NA,NA,NA,58,died day 58
+EQ045,4/19/18,SG2,ES5 ES6 ES6 ES7 ES7,5/2/18,5/8/18,5/30/18,7,Social,First,First,27,20,4,0,51,60,
+EQ045,4/19/18,SG2,ES5 ES6 ES6 ES7 ES7,5/30/18,6/1/18,6/25/18,2,Social,WasSocial,Second,36,44,17,3,100,60,many black or partially black larvae and pupae; egg cup with 4 eggs black
+EQ046,4/19/18,SG2,ES5 ES6 ES6 ES7 ES7,5/2/18,5/9/18,5/31/18,7,Social,First,First,43,23,12,0,78,60,
+EQ046,4/19/18,SG2,,5/31/18,7/16/18,8/7/18,46,Solitary,WasSocial,Second,0,1,0,0,1,60,
+EQ047,4/19/18,SG2,,5/2/18,5/21/18,6/12/18,19,Solitary,First,First,4,12,0,0,16,60,
+EQ047,4/19/18,SG2,,6/12/18,6/18/18,7/10/18,6,Solitary,WasSolitary,Second,31,8,3,0,42,60,
+EQ048,4/20/18,SG2,ES6 ES5 ES5 ES7 ES7,5/3/18,5/7/18,5/29/18,4,Social,First,First,11,18,0,0,29,60,
+EQ048,4/20/18,SG2,ES6 ES5 ES5 ES7 ES7,5/29/18,5/30/18,6/21/18,1,Social,WasSocial,Second,20,36,20,0,76,60,
+EQ050,4/20/18,SG2,ES6 ES6 ES5 ES5 ES7,5/3/18,5/14/18,6/5/18,11,Social,First,First,27,17,7,0,51,60,
+EQ050,4/20/18,SG2,,6/5/18,6/8/18,6/30/18,3,Solitary,WasSocial,Second,21,8,0,0,29,60,
+EQ051,4/20/18,SG2,,5/3/18,5/16/18,6/7/18,13,Solitary,First,First,16,3,0,0,19,60,
+EQ051,4/20/18,SG2,,6/7/18,6/8/18,6/30/18,1,Social,WasSolitary,Second,22,41,12,0,75,60,
+EQ052,4/25/18,SG2,ES5 ES5 ES6 ES7 ES7,5/8/18,5/16/18,6/7/18,8,Social,First,First,45,20,5,0,70,60,
+EQ052,4/25/18,SG2,ES5 ES5 ES6 ES7 ES7,6/7/18,6/8/18,6/30/18,1,Social,WasSocial,Second,29,33,8,8,78,60,
+EQ053,5/2/18,SG1,,5/15/18,7/9/18,7/31/18,55,Solitary,First,First,0,0,0,0,0,60,
+EQ053,5/2/18,SG1,AS1 AS1 VB3 VB3 VB2,7/31/18,8/9/18,8/25/18,9,Social,WasSolitary,Second,0,12,0,2,14,60,
+EQ054,5/2/18,SG3,,5/15/18,6/11/18,7/3/18,27,Solitary,First,First,6,4,0,0,10,60,
+EQ056,5/2/18,SG2,,5/15/18,6/20/18,7/12/18,36,Solitary,First,First,10,4,1,0,15,60,
+EQ056,5/2/18,SG2,KE2 KE2 KE2 KE2 KE2,7/12/18,7/13/18,8/4/18,1,Social,WasSolitary,Second,28,24,13,0,65,60,
