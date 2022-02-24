@@ -1,0 +1,818 @@
+---
+title: "ovary"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r, include = FALSE}
+library(tidyverse)
+library(plyr)
+library(reshape2)
+library(lme4)
+```
+
+# import data from cleanData file
+```{r}
+# assumes working directory is where the clean1 datasheet (output from exp1clean.Rmd file) lives
+getwd()
+ovaryData <- read.csv("./clean1.csv", header = TRUE)
+
+# make social treatment a factor with ordered levels
+ovaryData$SocTreat <- factor(ovaryData$SocTreat, levels = c("solitary", "social")) 
+```
+
+# visualize data
+
+## oocyte length
+line graph of oocyte length
+```{r}
+# gather all oocyte lengths into a single column
+plotData <- ovaryData %>%
+  gather(Ooc11, Ooc12, Ooc13, Ooc14, Ooc21, Ooc22, Ooc23, Ooc24,
+         key = "oocyte", 
+         value = "oocLen")
+# remove na values
+plotData <- plotData[!is.na(plotData$oocLen),]
+
+# count sample size
+sampleSizes <- plotData %>% group_by(RelDayTreat, SocTreat) %>% tally()
+sampleSizes
+
+# summarize the data and calculate mean, sd, sem
+summ <- ddply(plotData, 
+                    c("RelDayTreat", "SocTreat"), 
+                    summarise,
+                    mean = mean(oocLen), 
+                    sd = sd(oocLen),
+                    sem = sd(oocLen)/sqrt(length(oocLen)))
+
+# add rows with no data for social day 1 groups to make space in graph
+addTimeGap <- data.frame(matrix(nrow = 1, ncol = ncol(summ)))
+colnames(addTimeGap) <- colnames(summ)
+addTimeGap$RelDayTreat <- "0 gas 9"
+summ <- rbind(summ, addTimeGap)
+# summ
+
+# split summ into lines
+natural <- summ[c(1, 2, 4, 6, 8, 10),]
+natural$RelDayTreat <- as.character(natural$RelDayTreat)
+natural <- natural[order(natural$RelDayTreat),]
+natural$RelDayTreat <- as.factor(natural$RelDayTreat)
+natural
+premature <- summ[c(1, 3, 5, 11),]
+premature$RelDayTreat <- as.character(premature$RelDayTreat)
+premature <- premature[order(premature$RelDayTreat),]
+premature$RelDayTreat <- as.factor(premature$RelDayTreat)
+delayed <- summ[c(1, 2, 4, 6, 7, 9),]
+delayed$RelDayTreat <- as.character(delayed$RelDayTreat)
+delayed <- delayed[order(delayed$RelDayTreat),]
+delayed$RelDayTreat <- as.factor(delayed$RelDayTreat)
+
+#######
+
+# line graph
+ggplot() +
+  geom_line(data = natural, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = natural, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = premature, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = premature, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = delayed, aes(x = RelDayTreat, y = mean, group = 1)) +
+  geom_point(data = delayed, aes(x = RelDayTreat, y = mean)) +
+  geom_errorbar(data = summ, aes(x = RelDayTreat, y = mean, fill = SocTreat, ymin = mean - sem, ymax = mean + sem),
+                #position = position_dodge(.2),
+                width = 0.1) +
+  theme(text = element_text(size=15),
+        #axis.text.x = element_text(angle = 90),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  scale_x_discrete(labels=c("1", "4\nearly", "7", "//", "1", "4\nlate", "7")) + 
+  labs(x = "collection day at each nest stage", y = "oocyte length (mm)")
+```
+
+## resorbed oocytes
+barplot of total number of resorbed oocytes
+```{r}
+# select only the data I'm interested in for this plot
+#resorbPlotData <- select(ovaryData, RelDayTreat, SocTreat, nResOoc)
+plotData <- ovaryData[!is.na(ovaryData$nResOoc),]
+
+# count sample size
+sampleSizes <- plotData %>% group_by(RelDayTreat, SocTreat) %>% tally()
+sampleSizes
+
+# summarize the data and calculate mean, sd, sem
+summ <- ddply(plotData,
+                    c("RelDayTreat", "SocTreat"),
+                    summarise,
+                    mean = mean(nResOoc),
+                    sd = sd(nResOoc),
+                    sem = sd(nResOoc)/sqrt(length(nResOoc)))
+
+# add rows with no data for social day 1 groups to make space in graph
+addTimeGap <- data.frame(matrix(nrow = 1, ncol = ncol(summ)))
+colnames(addTimeGap) <- colnames(summ)
+addTimeGap$RelDayTreat <- "0 gas 9"
+summ <- rbind(summ, addTimeGap)
+# summ
+
+# split summ into lines
+natural <- summ[c(1, 2, 4, 6, 8, 10),]
+natural$RelDayTreat <- as.character(natural$RelDayTreat)
+natural <- natural[order(natural$RelDayTreat),]
+natural$RelDayTreat <- as.factor(natural$RelDayTreat)
+natural
+premature <- summ[c(1, 3, 5, 11),]
+premature$RelDayTreat <- as.character(premature$RelDayTreat)
+premature <- premature[order(premature$RelDayTreat),]
+premature$RelDayTreat <- as.factor(premature$RelDayTreat)
+delayed <- summ[c(1, 2, 4, 6, 7, 9),]
+delayed$RelDayTreat <- as.character(delayed$RelDayTreat)
+delayed <- delayed[order(delayed$RelDayTreat),]
+delayed$RelDayTreat <- as.factor(delayed$RelDayTreat)
+
+#######
+
+# line graph
+ggplot() +
+  geom_line(data = natural, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = natural, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = premature, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = premature, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = delayed, aes(x = RelDayTreat, y = mean, group = 1)) +
+  geom_point(data = delayed, aes(x = RelDayTreat, y = mean)) +
+  geom_errorbar(data = summ, aes(x = RelDayTreat, y = mean, fill = SocTreat, ymin = mean - sem, ymax = mean + sem),
+                #position = position_dodge(.2),
+                width = 0.1) +
+  theme(text = element_text(size=15),
+        #axis.text.x = element_text(angle = 90),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  scale_x_discrete(labels=c("1", "4\nearly", "7", "//", "1", "4\nlate", "7")) + 
+  labs(x = "collection day at each nest stage", y = "number of resorbed oocytes per queen")
+```
+
+
+
+
+########################################################################################################
+
+
+
+
+# mixed models
+
+### load packages
+```{r, include = FALSE}
+library(plyr)
+library(ggplot2) 
+library(ggpubr) 
+library(lme4)
+library(multcomp)
+library(car)
+library(AICcmodavg)
+library(lmtest)
+library(dplyr) 
+library(tidyr)
+library(cowplot)
+library(MuMIn)
+library(sjPlot)
+library(effects)
+```
+
+## oocyte length
+
+### restructure dataframe to use in model
+```{r}
+# gather all oocyte lengths into a single column
+LenData <- ovaryData %>%
+  gather(Ooc11, Ooc12, Ooc13, Ooc14, Ooc21, Ooc22, Ooc23, Ooc24,
+         key = "oocyte", 
+         value = "oocLen")
+# remove na values
+LenData <- LenData[!is.na(LenData$oocLen),]
+LenData$DaysTreat <- as.factor(LenData$DaysTreat)
+LenData
+```
+
+## decide on a distribution
+normal is best
+```{r}
+# visualize distribution
+ggdensity(LenData$oocLen)
+hist(LenData$oocLen)
+
+# normal distribution
+qqp(LenData$oocLen, "norm")
+
+# lnorm means lognormal
+qqp(LenData$oocLen, "lnorm")
+
+# gamma must be positive numbers
+LenData$oocLen.l <- LenData$oocLen + 1
+gamma <- fitdistr(LenData$oocLen.l, "gamma")
+qqp(LenData$oocLen, "gamma", shape = gamma$estimate[[1]], rate = gamma$estimate[[2]])
+```
+
+### find best model
+approximately normal distribution, continuous variable
+```{r}
+# null
+oocNull <- glmer(oocLen ~ 1 + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# full
+oocFull <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + 
+                  SocTreat*DaysTreat*RelTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 1 fixed effect, no interactions
+ooc1 <- glmer(oocLen ~ SocTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc2 <- glmer(oocLen ~ WingAvg + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc3 <- glmer(oocLen ~ JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc4 <- glmer(oocLen ~ RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc5 <- glmer(oocLen ~ DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 2 fixed effects, no interactions
+ooc6 <- glmer(oocLen ~ SocTreat + WingAvg + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc7 <- glmer(oocLen ~ SocTreat + JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc8 <- glmer(oocLen ~ SocTreat + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc9 <- glmer(oocLen ~ SocTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc10 <- glmer(oocLen ~ WingAvg + JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc11 <- glmer(oocLen ~ WingAvg + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc12 <- glmer(oocLen ~ WingAvg + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc13 <- glmer(oocLen ~ JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc14 <- glmer(oocLen ~ JHIII + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc15 <- glmer(oocLen ~ RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 3 fixed effects, no interactions
+ooc16 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc17 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc18 <- glmer(oocLen ~ SocTreat + WingAvg + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc19 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc20 <- glmer(oocLen ~ SocTreat + JHIII + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc21 <- glmer(oocLen ~ SocTreat + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc22 <- glmer(oocLen ~ WingAvg + JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc23 <- glmer(oocLen ~ WingAvg + JHIII + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc24 <- glmer(oocLen ~ WingAvg + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc25 <- glmer(oocLen ~ JHIII + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 4 fixed effects, no interactions
+ooc26 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc27 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc28 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc29 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc30 <- glmer(oocLen ~ WingAvg + JHIII + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 5 fixed effects, no interactions
+ooc31 <- glmer(oocLen ~ SocTreat + JHIII + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 1 2-way interaction
+ooc32 <- glmer(oocLen ~ SocTreat*WingAvg + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc33 <- glmer(oocLen ~ SocTreat*JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc34 <- glmer(oocLen ~ SocTreat*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+#
+ooc35 <- glmer(oocLen ~ SocTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc36 <- glmer(oocLen ~ WingAvg*JHIII + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc37 <- glmer(oocLen ~ WingAvg*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc38 <- glmer(oocLen ~ WingAvg*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc39 <- glmer(oocLen ~ JHIII*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc40 <- glmer(oocLen ~ JHIII*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc41 <- glmer(oocLen ~ RelTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# 1 3-way interaction
+ooc41 <- glmer(oocLen ~ SocTreat*RelTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# all but one term
+ooc42 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + 
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc43 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc44 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc45 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc46 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc47 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc48 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc49 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc50 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc51 <- glmer(oocLen ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# biological predictions
+ooc52 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc53 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc54 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc55 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc56 <- glmer(oocLen ~ SocTreat + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc57 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc58 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc59 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc60 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+# full model -1 term
+ooc61 <- glmer(oocLen ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc62 <- glmer(oocLen ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc63 <- glmer(oocLen ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc64 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc65 <- glmer(oocLen ~ SocTreat + WingAvg + JHIII + RelTreat + 
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc66 <- glmer(oocLen ~ SocTreat + JHIII + DaysTreat + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc67 <- glmer(oocLen ~ SocTreat + JHIII + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc68 <- glmer(oocLen ~ SocTreat*JHIII + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc69 <- glmer(oocLen ~ SocTreat*JHIII + SocTreat*RelTreat + DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+ooc70 <- glmer(oocLen ~ SocTreat + RelTreat + DaysTreat + JHIII +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = gaussian(link = "identity"), data = LenData)
+
+# best fit model = lowest AIC value
+# WingAvg has 1 NA value, explaining error "models are not all fitted to the same data"
+modSel <- model.sel(oocNull, oocFull, ooc1, ooc2, ooc3, ooc4, ooc5, ooc6, ooc7, ooc8, ooc9, ooc10, ooc11, ooc12, ooc13, ooc14, ooc15, ooc16, ooc17, ooc18, ooc19, ooc20, ooc21, ooc22, ooc23, ooc24, ooc25, ooc26, ooc27, ooc28, ooc29, ooc30, ooc31, ooc32, ooc33, ooc34, ooc35, ooc36, ooc37, ooc38, ooc39, ooc40, ooc41, ooc42, ooc43, ooc44, ooc45, ooc46, ooc47, ooc48, ooc49, ooc50, ooc51, ooc52, ooc23, ooc54, ooc55, ooc56, ooc57, ooc58, ooc60, ooc61, ooc62, ooc63, ooc64, ooc65, ooc66, ooc67, ooc68, ooc69, ooc70)
+
+modSel
+```
+
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- ooc56
+
+# summary for best model
+summary(mymodel)
+anova(mymodel)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+```
+
+### pairwise comparisons & p values
+```{r}
+# pairwise social vs. solitary at each collection day
+# multiply p-values by 4 to get Bonferonni-corrected values
+
+# early day 4
+e <- LenData[LenData$RelTreat == "gas",]
+e4 <- e[e$DaysTreat == "4",]
+t.test(e4$oocLen[e4$SocTreat=="social"], e4$oocLen[e4$SocTreat=="solitary"], data = e4)
+
+# early day 7
+e7 <- e[e$DaysTreat == "7",]
+t.test(e7$oocLen[e7$SocTreat=="social"], e7$oocLen[e7$SocTreat=="solitary"], data = e7)
+
+# late day 4
+l <- LenData[LenData$RelTreat == "offspring",]
+l4 <- l[l$DaysTreat == "4",]
+t.test(l4$oocLen[l4$SocTreat=="social"], l4$oocLen[l4$SocTreat=="solitary"], data = l4)
+
+# late day 7
+l7 <- l[l$DaysTreat == "7",]
+t.test(l7$oocLen[l7$SocTreat=="social"], l7$oocLen[l7$SocTreat=="solitary"], data = l7)
+
+```
+
+### compare variances
+```{r}
+# early day 4
+early4 <- LenData[LenData$RelTreat == "gas",]
+early4 <- early4[early4$DaysTreat == "4",]
+leveneTest(oocLen ~ SocTreat, data = early4)
+
+# early day 7
+early7 <- LenData[LenData$RelTreat == "gas",]
+early7 <- early7[early7$DaysTreat == "7",]
+leveneTest(oocLen ~ SocTreat, data = early7)
+
+# late day 4
+late4 <- LenData[LenData$RelTreat == "gas",]
+late4 <- late4[late4$DaysTreat == "4",]
+leveneTest(oocLen ~ SocTreat, data = late4)
+
+# late day 7
+late7 <- LenData[LenData$RelTreat == "gas",]
+late7 <- late7[late7$DaysTreat == "4",]
+leveneTest(oocLen ~ SocTreat, data = late7)
+```
+
+
+
+
+
+########################################################################################################
+
+
+
+
+
+
+
+## oocyte resorption
+
+### restructure dataframe to use in model
+```{r}
+# gather all ovariole stages into a single column
+resData <- ovaryData %>%
+  gather(ovR11, ovR12, ovR13, ovR14, ovR21, ovR22, ovR23, ovR24,
+         key = "oocR",
+         value = "resorb")
+# remove na values
+resData <- resData[!is.na(resData$resorb),]
+# make integer values
+resData$resorb[resData$resorb == "R"] <- 1
+resData$resorb[resData$resorb == "U"] <- 0
+resData$resorb <- as.factor(resData$resorb)
+```
+
+### decide on a distribution
+binary response therefore binomial distribution
+```{r}
+# negative binomial must be discrete positive numbers
+nbinom <- fitdistr(resData$resorb, "Negative Binomial")
+qqp(resData$resorb, "nbinom", size = nbinom$estimate[[1]], mu = nbinom$estimate[[2]])
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(resData$resorb, "Poisson")
+qqp(resData$resorb, "pois", poisson$estimate)
+```
+
+### add oocAvg to use as covariate
+```{r, echo = FALSE}
+# average the oocyte lengths for each bee 
+for (i in 1:nrow(resData)) {
+  resData$oocAvg[i] <- mean(c(resData$Ooc11[i],
+                              resData$Ooc12[i],
+                              resData$Ooc13[i],
+                              resData$Ooc14[i],
+                              resData$Ooc21[i],
+                              resData$Ooc22[i],
+                              resData$Ooc23[i],
+                              resData$Ooc24[i]),
+                              na.rm = TRUE) }
+```
+
+## find best model
+binomial distribution, binary response
+```{r}
+# null
+resNull <- glmer(resorb ~ 1 + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# full
+resFull <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + oocAvg +
+                  SocTreat*DaysTreat*RelTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 1 fixed effect, no interactions
+res1 <- glmer(resorb ~ SocTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res2 <- glmer(resorb ~ WingAvg + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res3 <- glmer(resorb ~ JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res4 <- glmer(resorb ~ RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res5 <- glmer(resorb ~ DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res71 <-glmer(resorb ~ oocAvg + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 2 fixed effects, no interactions
+res6 <- glmer(resorb ~ SocTreat + WingAvg + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res7 <- glmer(resorb ~ SocTreat + JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res8 <- glmer(resorb ~ SocTreat + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res9 <- glmer(resorb ~ SocTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res10 <- glmer(resorb ~ WingAvg + JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res11 <- glmer(resorb ~ WingAvg + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res12 <- glmer(resorb ~ WingAvg + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res13 <- glmer(resorb ~ JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res14 <- glmer(resorb ~ JHIII + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res15 <- glmer(resorb ~ RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res72 <- glmer(resorb ~ oocAvg + SocTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res73 <- glmer(resorb ~ oocAvg + WingAvg + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res74 <- glmer(resorb ~ oocAvg + JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res75 <- glmer(resorb ~ oocAvg + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res76 <- glmer(resorb ~ oocAvg + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 3 fixed effects, no interactions
+res16 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res17 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res18 <- glmer(resorb ~ SocTreat + WingAvg + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res19 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res20 <- glmer(resorb ~ SocTreat + JHIII + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res21 <- glmer(resorb ~ SocTreat + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res22 <- glmer(resorb ~ WingAvg + JHIII + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res23 <- glmer(resorb ~ WingAvg + JHIII + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res24 <- glmer(resorb ~ WingAvg + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res25 <- glmer(resorb ~ JHIII + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res77 <- glmer(resorb ~ oocAvg + RelTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res78 <- glmer(resorb ~ oocAvg + SocTreat + RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res79 <- glmer(resorb ~ oocAvg + SocTreat + DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res80 <- glmer(resorb ~ oocAvg + JHIII + SocTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res81 <- glmer(resorb ~ oocAvg + RelTreat + JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 4 fixed effects, no interactions
+res26 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res27 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res28 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res29 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res30 <- glmer(resorb ~ WingAvg + JHIII + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 5 fixed effects, no interactions
+res31 <- glmer(resorb ~ SocTreat + JHIII + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 1 2-way interaction
+res32 <- glmer(resorb ~ SocTreat*WingAvg + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res33 <- glmer(resorb ~ SocTreat*JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res34 <- glmer(resorb ~ SocTreat*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res35 <- glmer(resorb ~ SocTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res36 <- glmer(resorb ~ WingAvg*JHIII + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res37 <- glmer(resorb ~ WingAvg*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res38 <- glmer(resorb ~ WingAvg*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res39 <- glmer(resorb ~ JHIII*RelTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res40 <- glmer(resorb ~ JHIII*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res41 <- glmer(resorb ~ RelTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# 1 3-way interaction
+res41 <- glmer(resorb ~ SocTreat*RelTreat*DaysTreat + 
+               (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# all but one term
+res42 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + 
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res43 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res44 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res45 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res46 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res47 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res48 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res49 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res50 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res51 <- glmer(resorb ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# biological predictions
+res52 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res53 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res54 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res55 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res56 <- glmer(resorb ~ SocTreat + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res57 <- glmer(resorb ~ SocTreat + WingAvg + JHIII +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res58 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res59 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res60 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+# full model -1 term
+res61 <- glmer(resorb ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res62 <- glmer(resorb ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res63 <- glmer(resorb ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res64 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res65 <- glmer(resorb ~ SocTreat + WingAvg + JHIII + RelTreat + 
+                SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res66 <- glmer(resorb ~ SocTreat + JHIII + DaysTreat + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res67 <- glmer(resorb ~ SocTreat + JHIII + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res68 <- glmer(resorb ~ SocTreat*JHIII + SocTreat*RelTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res69 <- glmer(resorb ~ SocTreat*JHIII + SocTreat*RelTreat + DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res70 <- glmer(resorb ~ SocTreat + RelTreat + DaysTreat + JHIII +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+res82 <- glmer(resorb ~ SocTreat + RelTreat + DaysTreat + JHIII + oocAvg +
+                RelTreat*DaysTreat +
+                (1|NatCol) + (1|BeeID), family = binomial, data = resData)
+
+# best fit model = lowest AIC value
+# WingAvg has 1 NA value, explaining error "models are not all fitted to the same data"
+modSel <- model.sel(resNull, resFull, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15, res16, res17, res18, res19, res20, res21, res22, res23, res24, res25, res26, res27, res28, res29, res30, res31, res32, res33, res34, res35, res36, res37, res38, res39, res40, res41, res42, res43, res44, res45, res46, res47, res48, res49, res50, res51, res52, res23, res54, res55, res56, res57, res58, res60, res61, res62, res63, res64, res65, res66, res67, res68, res69, res70, res71, res72, res73, res74, res75, res76, res77, res78, res79, res80, res81, res82)
+
+modSel
+```
+
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- res34
+
+# summary for best model
+summary(mymodel)
+anova(mymodel)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+
+# check for overdispersion - p < 0.05 = oversdispersed and invalid model
+overdisp_fun <- function(mymodel) {
+    rdf <- df.residual(mymodel)
+    rp <- residuals(mymodel,type="pearson")
+    Pearson.chisq <- sum(rp^2)
+    prat <- Pearson.chisq/rdf
+    pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+    c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+overdisp_fun(mymodel)
+```
+
+### pairwise comparisons & p-values
+```{r}
+# posthoc tukey's test comparing of social-solitary queens within each collection stage
+posthoc1 <- lsmeans(mymodel, pairwise ~ SocTreat|RelTreat, adjust = "tukey")
+summary(posthoc1)
+```

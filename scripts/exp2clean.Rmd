@@ -1,0 +1,100 @@
+---
+title: "broodTake"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+# import all data
+```{r}
+# assumes working directory is where the original datasheet lives
+getwd()
+nestData <- read.csv("../data/experiment2data.csv", 
+                    header = TRUE,
+                    na.strings = c("", " ", "na", "NA"))
+nestData
+
+# queenData <- read.csv("./experiment2queens.csv", 
+#                     header = TRUE,
+#                     na.strings = c("", " ", "na", "NA"))
+# queenData
+```
+
+# remove bad data
+```{r}
+# clean nestData
+cleanNestData <- nestData[!is.na(nestData$socTreat),]       # na treatment
+cleanNestData <- cleanNestData[!is.na(cleanNestData$start),]# na start date
+cleanNestData
+
+# count number of rows removed
+nNests <- length(unique(nestData$nestID))
+nCleanNests <- length(unique(cleanNestData$nestID))
+print(paste("There have been", nNests - nCleanNests, "nests removed from the data.", sep = " "))
+```
+
+# check sample sizes for each group
+```{r}
+# count the number of samples in each treatment group
+cleanSampleSizes <- cleanNestData %>% group_by(history, socTreat) %>% tally()
+cleanSampleSizes
+
+# plot the number of samples in each treatment group
+ggplot(cleanSampleSizes, aes(x = history, y = n, fill = socTreat)) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+# export cleanData file for use in analyses
+```{r}
+# export
+write.csv(cleanNestData, file = "./clean2.csv")
+cleanNestData
+```
+
+# check out a few things
+```{r}
+# age at end of each nest
+ageData <- cleanNestData
+
+# make date variables dates
+ageData$collDate <- as.character(ageData$collDate)
+ageData$collDate <- as.Date(ageData$collDate, "%m/%d/%Y")
+ageData$start <- as.character(ageData$start)
+ageData$start <- as.Date(ageData$start, "%m/%d/%Y")
+ageData$pullDay <- as.character(ageData$pullDay)
+ageData$pullDay <- as.Date(ageData$pullDay, "%m/%d/%Y")
+ageData
+
+# days start to finish in the nest
+ageData$nestLength <- ageData$collDate - ageData$start
+ageData$nestLength <- as.numeric(ageData$nestLength)
+
+# age of queen at end of each nest
+ageData$queenAge <- ageData$collDate - ageData$pullDay
+
+# first nest age
+firstData <- ageData[ageData$nest == "First",]
+firstData <- firstData[firstData$daysToDeath == 60,]
+maxAge <- (max(firstData$queenAge, na.rm = TRUE))
+print(paste("The oldest queen was", maxAge, "days old at the end of the first nest.", sep = " "))
+minAge <- (min(firstData$queenAge, na.rm = TRUE))
+print(paste("The yougest queen was", minAge, "days old at the end of the first nest.", sep = " "))
+
+# second nest age
+secondData <- ageData[ageData$nest == "Second",]
+secondData <- secondData[secondData$daysToDeath == 60,]
+maxAge <- (max(secondData$queenAge, na.rm = TRUE))
+print(paste("The oldest queen was", maxAge, "days old at the end of the second nest.", sep = " "))
+minAge <- (min(secondData$queenAge, na.rm = TRUE))
+print(paste("The yougest queen was", minAge, "days old at the end of the second nest.", sep = " "))
+```

@@ -1,0 +1,403 @@
+---
+title: "btRepro"
+output: pdf_document
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r, include = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(car)
+library(MuMIn)
+```
+
+# import data from cleanData file
+```{r}
+# assumes working directory is where the original datasheet lives
+# getwd()
+btData <- read.csv("./clean2.csv", header = TRUE)
+btData
+
+# make social treatment a factor with ordered levels
+btData$socTreat <- factor(btData$socTreat, levels = c("Solitary", "Social")) 
+```
+
+# visualize days to eggs
+```{r}
+# subset to only data i want to graph
+plotData <- btData[!is.na(btData$daysToEggs),]
+
+# count sample size
+sampleSizes <- plotData %>% group_by(history, socTreat) %>% tally()
+sampleSizes
+
+# summarize the data and calculate mean, sd, sem
+summ <- ddply(plotData, 
+                c("history", "nest", "socTreat"), 
+                summarise,
+                mean = mean(daysToEggs), 
+                sd = sd(daysToEggs),
+                sem = sd(daysToEggs)/sqrt(length(daysToEggs)))
+
+# split summ into lines
+solsol <- summ[c(1, 5),]
+solsol$history <- as.character(solsol$history)
+solsol <- solsol[order(solsol$history),]
+solsol$history <- as.factor(solsol$history)
+solsoc <- summ[c(1, 6),]
+solsoc$history <- as.character(solsoc$history)
+solsoc <- solsoc[order(solsoc$history),]
+solsoc$history <- as.factor(solsoc$history)
+socsol <- summ[c(2, 3),]
+socsol$history <- as.character(socsol$history)
+socsol <- socsol[order(socsol$history),]
+socsol$history <- as.factor(socsol$history)
+socsoc <- summ[c(2, 4),]
+socsoc$history <- as.character(socsoc$history)
+socsoc <- socsoc[order(socsoc$history),]
+socsoc$history <- as.factor(socsoc$history)
+
+# line graph
+ggplot() +
+  geom_line(data = solsol, aes(x = nest, y = mean, group = 1), linetype = "solid") +
+  geom_line(data = solsoc, aes(x = nest, y = mean, group = 1), linetype = "solid") +
+  geom_line(data = socsol, aes(x = nest, y = mean, group = 1), linetype = "dotted") +
+  geom_line(data = socsoc, aes(x = nest, y = mean, group = 1), linetype = "dotted") +
+  geom_errorbar(data = summ, aes(x = nest, y = mean, fill = socTreat, ymin = mean - sem, ymax = mean + sem),
+                width = 0.05) +
+  geom_point(data = summ, aes(x = nest, y = mean, shape = socTreat), size = 5) +
+  scale_color_grey(start = 0, end = .7) +
+  scale_shape_manual(values = c(16, 21)) +
+  labs(x = "nest", y = "days until first eggs", 
+      color = "social treatment", shape = "social status") +
+  theme(panel.background = element_blank(), axis.line = element_line(colour = "black"), 
+        text = element_text(size=15))
+```
+# mixed models
+
+```{r}
+library(sjPlot)
+library(effects)
+library(lsmeans)
+```
+
+## decide on a distribution
+### my data is not normal, lnorm fits best
+```{r}
+dayData <- btData[!is.na(btData$daysToEggs),]
+
+# normal distribution
+qqp(dayData$daysToEggs, "norm")
+
+# lnorm means lognormal
+qqp(dayData$daysToEggs, "lnorm")
+
+# negative binomial must be discrete positive numbers
+nbinom <- fitdistr(dayData$daysToEggs, "Negative Binomial")
+qqp(dayData$daysToEggs, "nbinom", size = nbinom$estimate[[1]], mu = nbinom$estimate[[2]])
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(dayData$daysToEggs, "Poisson")
+qqp(dayData$daysToEggs, "pois", lambda = poisson$estimate)
+
+# gamma must be positive numbers
+gamma <- fitdistr(dayData$daysToEggs, "gamma")
+qqp(dayData$daysToEggs, "gamma", shape = gamma$estimate[[1]], rate = gamma$estimate[[2]])
+
+###################################################################################
+
+# plot the social treatments separately to verify they still fit lnorm
+
+# subset the data into social and solitary
+early <- dayData[dayData$RelTreat == "gas",]
+late <- dayData[dayData$RelTreat == "offspring",]
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(late$daysToEggs, "Poisson")
+qqp(late$daysToEggs, "pois", lambda = poisson$estimate)
+
+# transform the data
+dayData$daysToEggs.l <- log(dayData$daysToEggs + 0.01)
+
+```
+
+### find best model
+lnorm distribution, discrete variable
+```{r}
+# models
+daysNull <- glmer(daysToEggs.l ~ 1 + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+daysFull <- glmer(daysToEggs.l ~ nest * socTreat * history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+# all but 1
+days1 <- glmer(daysToEggs.l ~ nest * socTreat + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days2 <- glmer(daysToEggs.l ~ nest * history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days3 <- glmer(daysToEggs.l ~ socTreat * history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+# only 1
+days4 <- glmer(daysToEggs.l ~ nest + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days5 <- glmer(daysToEggs.l ~ socTreat + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days6 <- glmer(daysToEggs.l ~ history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+# all, no interactions
+days7 <- glmer(daysToEggs.l ~ nest + socTreat + history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+# 2, no interactions
+days8 <- glmer(daysToEggs.l ~ nest + socTreat + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days9 <- glmer(daysToEggs.l ~ nest + history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+days10 <- glmer(daysToEggs.l ~ socTreat + history + 
+               (1|qNatCol), family = gaussian(link = "log"), data = dayData)
+
+modSel <- model.sel(daysNull, daysFull, days1, days2, days3, days4, days5, days6, days7, days8, days9, days10)
+modSel
+```
+
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- days1
+
+# summary for best model
+summary(mymodel)
+anova(mymodel)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+```
+
+### pairwise comparisons & p-values
+```{r}
+# posthoc tukey's test comparing of social-solitary queens within each collection stage
+posthoc1 <- lsmeans(mymodel, pairwise ~ nest|socTreat, adjust = "tukey")
+summary(posthoc1)
+
+# compare variances
+
+# levene's test for equal variances
+# first nest
+first <- dayData[dayData$nest == "First",]
+leveneTest(daysToEggs ~ socTreat, data = first)
+first
+
+# second nest
+second <- dayData[dayData$nest == "Second",]
+leveneTest(daysToEggs ~ socTreat, data = second)
+```
+
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+######
+###
+#
+#######
+###
+#
+
+# visualize number of brood
+```{r}
+# subset to only data i want to graph
+plotData <- btData[!is.na(btData$nAllBrood),]
+
+# count sample size
+sampleSizes <- plotData %>% group_by(history, socTreat) %>% tally()
+sampleSizes
+
+# summarize the data and calculate mean, sd, sem
+summ <- ddply(plotData, 
+                c("history", "nest", "socTreat"), 
+                summarise,
+                mean = mean(nAllBrood), 
+                sd = sd(nAllBrood),
+                sem = sd(nAllBrood)/sqrt(length(nAllBrood)))
+summ
+
+# split summ into lines
+solsol <- summ[c(1, 5),]
+solsol$history <- as.character(solsol$history)
+solsol <- solsol[order(solsol$history),]
+solsol$history <- as.factor(solsol$history)
+solsoc <- summ[c(1, 6),]
+solsoc$history <- as.character(solsoc$history)
+solsoc <- solsoc[order(solsoc$history),]
+solsoc$history <- as.factor(solsoc$history)
+socsol <- summ[c(2, 3),]
+socsol$history <- as.character(socsol$history)
+socsol <- socsol[order(socsol$history),]
+socsol$history <- as.factor(socsol$history)
+socsoc <- summ[c(2, 4),]
+socsoc$history <- as.character(socsoc$history)
+socsoc <- socsoc[order(socsoc$history),]
+socsoc$history <- as.factor(socsoc$history)
+
+# line graph
+ggplot() +
+  geom_line(data = solsol, aes(x = nest, y = mean, group = 1), linetype = "solid") +
+  geom_line(data = solsoc, aes(x = nest, y = mean, group = 1), linetype = "solid") +
+  geom_line(data = socsol, aes(x = nest, y = mean, group = 1), linetype = "dotted") +
+  geom_line(data = socsoc, aes(x = nest, y = mean, group = 1), linetype = "dotted") +
+  geom_errorbar(data = summ, aes(x = nest, y = mean, fill = socTreat, ymin = mean - sem, ymax = mean + sem),
+                #position = position_dodge(.2),
+                width = 0.05) +
+  geom_point(data = summ, aes(x = nest, y = mean, shape = socTreat), size = 5) +
+  scale_color_grey(start = 0, end = .7) +
+    scale_shape_manual(values = c(16, 21)) +
+  # scale_shape_manual(values = c(15, 16, 17),
+  #                   labels = c("NA", "was previously social", "was previously solitary")) + 
+  labs(x = "nest", y = "number of brood items", 
+      color = "social treatment", shape = "social treatment") +
+  # guides(col = guide_legend(override.aes = list(shape = 15, size = 6.5)),
+  #        shape = guide_legend(override.aes = list(shape = c(0, 1, 2)))) +
+  theme(panel.background = element_blank(), axis.line = element_line(colour = "black"), 
+        text = element_text(size=15))
+```
+
+# mixed models
+normally distributed
+```{r}
+# normal distribution
+qqp(btData$nAllBrood, "norm")
+
+# lnorm means lognormal
+qqp(btData$nAllBrood, "lnorm")
+
+# negative binomial must be discrete positive numbers
+nbinom <- fitdistr(btData$nAllBrood, "Negative Binomial")
+qqp(btData$nAllBrood, "nbinom", size = nbinom$estimate[[1]], mu = nbinom$estimate[[2]])
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(btData$nAllBrood, "Poisson")
+qqp(btData$nAllBrood, "pois", lambda = poisson$estimate)
+
+# gamma must be positive numbers
+gamma <- fitdistr(btData$nAllBrood, "gamma")
+qqp(btData$nAllBrood, "gamma", shape = gamma$estimate[[1]], rate = gamma$estimate[[2]])
+```
+
+### find best model
+normal distribution
+```{r}
+# models
+bNull <- glmer(nAllBrood ~ 1 + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+bFull <- glmer(nAllBrood ~ nest * socTreat * history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+# all but 1
+b1 <- glmer(nAllBrood ~ nest * socTreat + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b2 <- glmer(nAllBrood ~ nest * history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b3 <- glmer(nAllBrood ~ socTreat * history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+# only 1
+b4 <- glmer(nAllBrood ~ nest + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b5 <- glmer(nAllBrood ~ socTreat + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b6 <- glmer(nAllBrood ~ history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+# all, no interactions
+b7 <- glmer(nAllBrood ~ nest + socTreat + history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+# 2, no interactions
+b8 <- glmer(nAllBrood ~ nest + socTreat + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b9 <- glmer(nAllBrood ~ nest + history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+b10 <- glmer(nAllBrood ~ socTreat + history + 
+               (1|qNatCol), family = gaussian(link = "identity"), data = btData)
+
+modSel <- model.sel(bNull, bFull, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10)
+modSel
+```
+
+### summarize the model, overall p-values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- b3
+
+# summary for best model
+summary(mymodel)
+anova(mymodel)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+```
+
+### pairwise comparisons & p-values
+```{r}
+# posthoc tukey's tests comparing solitary and social groups within each social history
+posthoc1 <- lsmeans(mymodel, pairwise ~ socTreat|history, adjust = "tukey")
+summary(posthoc1)
+```
+

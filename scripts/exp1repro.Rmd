@@ -1,0 +1,614 @@
+---
+title: "offspring"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r}
+library(tidyverse)
+library(plyr)
+library(reshape2)
+library(lme4)
+```
+
+# import data from cleanData file
+```{r}
+# assumes working directory is where the clean1 datasheet (output from exp1clean.Rmd file) lives
+getwd()
+offData <- read.csv("./clean1.csv", header = TRUE)
+
+# remove NA values
+offData <- offData[!is.na(offData$nEggs),]
+offData
+
+# count the number of samples in each treatment group
+sampleSizes <- offData %>% group_by(RelDayTreat, SocTreat) %>% tally()
+sampleSizes
+```
+
+# visualize data
+
+```{r}
+# make social treatment a factor so it creates 2 distinct groups (rather than scale from 0-1)
+offData$SocTreat <- factor(offData$SocTreat, levels = c("solitary", "social"))
+
+# select only data i want to graph
+plotData <- plotData %>% subset(!is.na(plotData$RelDayTreat))
+
+# add rows with no data for social day 1 groups to make space in graph
+fillGaps <- data.frame(matrix(nrow = 2, ncol = ncol(plotData)-1), NA)
+colnames(fillGaps) <- colnames(plotData)
+fillGaps$SocTreat <- "social"
+fillGaps$RelDayTreat[1] <- "0 gas 1"
+fillGaps$RelDayTreat[2] <- "0 offspring 1"
+plotData <- rbind(plotData, fillGaps)
+plotData
+```
+
+## number of eggs
+line graph
+```{r}
+# look at max and min number of eggs in late-stage nests
+late <- offData[offData$RelTreat == "offspring",]
+max(late$nEggs)
+min(late$nEggs)
+
+lateSocial <- late[late$SocTreat == "social",]
+max(lateSocial$nEggs)
+min(lateSocial$nEggs)
+
+lateSolitary <- late[late$SocTreat == "solitary",]
+max(lateSolitary$nEggs)
+min(lateSolitary$nEggs)
+lateSolitary
+
+late1Sol <- lateSolitary[lateSolitary$DaysTreat == "1",]
+late4Sol <- lateSolitary[lateSolitary$DaysTreat == "4",]
+late7Sol <- lateSolitary[lateSolitary$DaysTreat == "7",]
+late1Sol
+late4Sol
+late7Sol
+
+# summarize the early data and calculate mean, sd, sem
+summ <- ddply(offData,
+                c("RelDayTreat", "SocTreat"), 
+                summarise,
+                mean = mean(nEggs), 
+                sd = sd(nEggs),
+                sem = sd(nEggs)/sqrt(length(nEggs)))
+
+# add rows with no data for social day 1 groups to make space in graph
+addTimeGap <- data.frame(matrix(nrow = 1, ncol = ncol(summ)))
+colnames(addTimeGap) <- colnames(summ)
+addTimeGap$RelDayTreat <- "0 gas 9"
+summ <- rbind(summ, addTimeGap)
+# summ
+
+# split summ into lines
+natural <- summ[c(1, 2, 4, 6, 8, 10),]
+natural$RelDayTreat <- as.character(natural$RelDayTreat)
+natural <- natural[order(natural$RelDayTreat),]
+natural$RelDayTreat <- as.factor(natural$RelDayTreat)
+natural
+premature <- summ[c(1, 3, 5, 11),]
+premature$RelDayTreat <- as.character(premature$RelDayTreat)
+premature <- premature[order(premature$RelDayTreat),]
+premature$RelDayTreat <- as.factor(premature$RelDayTreat)
+delayed <- summ[c(1, 2, 4, 6, 7, 9),]
+delayed$RelDayTreat <- as.character(delayed$RelDayTreat)
+delayed <- delayed[order(delayed$RelDayTreat),]
+delayed$RelDayTreat <- as.factor(delayed$RelDayTreat)
+
+
+#######
+
+# line graph
+ggplot() +
+  geom_line(data = natural, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = natural, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = premature, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = premature, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = delayed, aes(x = RelDayTreat, y = mean, group = 1)) +
+  geom_point(data = delayed, aes(x = RelDayTreat, y = mean)) +
+  geom_errorbar(data = summ, aes(x = RelDayTreat, y = mean, fill = SocTreat, ymin = mean - sem, ymax = mean + sem),
+                #position = position_dodge(.2),
+                width = 0.1) +
+  theme(text = element_text(size=15),
+        #axis.text.x = element_text(angle = 90),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  scale_x_discrete(labels=c("1", "4\nearly", "7", "//", "1", "4\nlate", "7")) + 
+  labs(x = "collection day at each nest stage", y = "number of eggs")
+```
+
+# mixed models
+```{r, include = FALSE}
+library(lme4)
+library(car)
+library(MuMIn)
+library(lsmeans)
+library(sjPlot)
+library(effects)
+```
+
+## decide on a distribution
+### poisson looks best
+```{r}
+# add one to data so that all nonzero values
+offData$nEggs.t <- offData$nEggs + 1
+
+# normal distribution
+qqp(offData$nEggs.t, "norm")
+
+# lnorm means lognormal
+qqp(offData$nEggs.t, "lnorm")
+
+# negative binomial must be discrete positive numbers
+nbinom <- fitdistr(offData$nEggs.t, "Negative Binomial")
+qqp(offData$nEggs.t, "nbinom", size = nbinom$estimate[[1]], mu = nbinom$estimate[[2]])
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(offData$nEggs.t, "Poisson")
+qqp(offData$nEggs.t, "pois", lambda = poisson$estimate)
+
+# gamma must be positive numbers
+gamma <- fitdistr(offData$nEggs.t, "gamma")
+qqp(offData$nEggs.t, "gamma", shape = gamma$estimate[[1]], rate = gamma$estimate[[2]])
+
+###################################################################################
+
+# plot the social treatments separately to verify they still fit poisson
+
+# subset the data into social and solitary
+early <- offData[offData$RelTreat == "gas",]
+late <- offData[offData$RelTreat == "offspring",]
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(late$nEggs.t, "Poisson")
+qqp(late$nEggs.t, "pois", lambda = poisson$estimate)
+
+# poisson must be positive whole numbers
+poisson <- fitdistr(early$nEggs.t, "Poisson")
+qqp(early$nEggs.t, "pois", lambda = poisson$estimate)
+```
+
+```{r}
+for (i in 1:nrow(offData)) {
+  offData$oocAvg[i] <- mean(c(offData$Ooc11[i],
+                              offData$Ooc12[i],
+                              offData$Ooc13[i],
+                              offData$Ooc14[i],
+                              offData$Ooc21[i],
+                              offData$Ooc22[i],
+                              offData$Ooc23[i],
+                              offData$Ooc24[i]),
+                              na.rm = TRUE) }
+```
+
+```{r}
+# null
+eggNull <- glmer(nEggs.t ~ 1 + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# full
+eggFull <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + 
+                  SocTreat*DaysTreat*RelTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 1 fixed effect, no interactions
+egg1 <- glmer(nEggs.t ~ SocTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg2 <- glmer(nEggs.t ~ WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg3 <- glmer(nEggs.t ~ JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg4 <- glmer(nEggs.t ~ RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg5 <- glmer(nEggs.t ~ DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 2 fixed effects, no interactions
+egg6 <- glmer(nEggs.t ~ SocTreat + WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg7 <- glmer(nEggs.t ~ SocTreat + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg8 <- glmer(nEggs.t ~ SocTreat + RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg9 <- glmer(nEggs.t ~ SocTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg10 <- glmer(nEggs.t ~ WingAvg + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg11 <- glmer(nEggs.t ~ WingAvg + RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg12 <- glmer(nEggs.t ~ WingAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg13 <- glmer(nEggs.t ~ JHIII + RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg14 <- glmer(nEggs.t ~ JHIII + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg15 <- glmer(nEggs.t ~ RelTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 3 fixed effects, no interactions
+egg16 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg17 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg18 <- glmer(nEggs.t ~ SocTreat + WingAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg19 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg20 <- glmer(nEggs.t ~ SocTreat + JHIII + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg21 <- glmer(nEggs.t ~ SocTreat + RelTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg22 <- glmer(nEggs.t ~ WingAvg + JHIII + RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg23 <- glmer(nEggs.t ~ WingAvg + JHIII + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg24 <- glmer(nEggs.t ~ WingAvg + RelTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg25 <- glmer(nEggs.t ~ JHIII + RelTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 4 fixed effects, no interactions
+egg26 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg27 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg28 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg29 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg30 <- glmer(nEggs.t ~ WingAvg + JHIII + RelTreat + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 5 fixed effects, no interactions
+egg31 <- glmer(nEggs.t ~ SocTreat + JHIII + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 1 2-way interaction
+egg32 <- glmer(nEggs.t ~ SocTreat*WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg33 <- glmer(nEggs.t ~ SocTreat*JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg34 <- glmer(nEggs.t ~ SocTreat*RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg35 <- glmer(nEggs.t ~ SocTreat*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg36 <- glmer(nEggs.t ~ WingAvg*JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg37 <- glmer(nEggs.t ~ WingAvg*RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg38 <- glmer(nEggs.t ~ WingAvg*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg39 <- glmer(nEggs.t ~ JHIII*RelTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg40 <- glmer(nEggs.t ~ JHIII*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+egg41 <- glmer(nEggs.t ~ RelTreat*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# 1 3-way interaction
+egg41 <- glmer(nEggs.t ~ SocTreat*RelTreat*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = offData)
+# all but one term
+egg42 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat + 
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg43 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg44 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg45 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg46 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg47 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg48 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg49 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg50 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*JHIII + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg51 <- glmer(nEggs.t ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+# biological predictions
+egg52 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg53 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg54 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg55 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg56 <- glmer(nEggs.t ~ SocTreat + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg57 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg58 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg59 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg60 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*RelTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+# full model -1 term
+egg61 <- glmer(nEggs.t ~ WingAvg + JHIII + RelTreat + DaysTreat +
+                DaysTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg62 <- glmer(nEggs.t ~ SocTreat + JHIII + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg63 <- glmer(nEggs.t ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg64 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg65 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + RelTreat + 
+                SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg66 <- glmer(nEggs.t ~ SocTreat + JHIII + DaysTreat + SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg67 <- glmer(nEggs.t ~ SocTreat + JHIII + SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg68 <- glmer(nEggs.t ~ SocTreat*JHIII + SocTreat*RelTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+egg69 <- glmer(nEggs.t ~ SocTreat*JHIII + SocTreat*RelTreat + DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = offData)
+
+# best fit model = lowest AIC value
+# WingAvg has 1 NA value, explaining error "models are not all fitted to the same data"
+modSel <- model.sel(eggNull, eggFull, egg1, egg2, egg3, egg4, egg5, egg6, egg7, egg8, egg9, egg10, egg11, egg12, egg13, egg14, egg15, egg16, egg17, egg18, egg19, egg20, egg21, egg22, egg23, egg24, egg25, egg26, egg27, egg28, egg29, egg30, egg31, egg32, egg33, egg34, egg35, egg36, egg37, egg38, egg39, egg40, egg41, egg42, egg43, egg44, egg45, egg46, egg47, egg48, egg49, egg50, egg51, egg52, egg23, egg54, egg55, egg56, egg57, egg58, egg60, egg61, egg62, egg63, egg64, egg65, egg66, egg67, egg68, egg69)
+
+modSel
+```
+# late stage only
+```{r}
+lateData <- offData[offData$RelTreat == "offspring",]
+lateData$nEggs <- as.numeric(lateData$nEggs)
+lateSocial <- lateData[lateData$SocTreat == "social",]
+lateSocialMean <- mean(lateSocial$nEggs, na.rm = TRUE)
+summary(lateSocial$nEggs)
+lateData
+# null
+eggNull <- glmer(nEggs.t ~ 1 + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# full
+eggFull <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat + 
+                  SocTreat*DaysTreat*oocAvg +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 1 fixed effect, no interactions
+egg1 <- glmer(nEggs.t ~ SocTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg2 <- glmer(nEggs.t ~ WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg3 <- glmer(nEggs.t ~ JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg4 <- glmer(nEggs.t ~ oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg5 <- glmer(nEggs.t ~ DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 2 fixed effects, no interactions
+egg6 <- glmer(nEggs.t ~ SocTreat + WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg7 <- glmer(nEggs.t ~ SocTreat + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg8 <- glmer(nEggs.t ~ SocTreat + oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg9 <- glmer(nEggs.t ~ SocTreat + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg10 <- glmer(nEggs.t ~ WingAvg + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg11 <- glmer(nEggs.t ~ WingAvg + oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg12 <- glmer(nEggs.t ~ WingAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg13 <- glmer(nEggs.t ~ JHIII + oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg14 <- glmer(nEggs.t ~ JHIII + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg15 <- glmer(nEggs.t ~ oocAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 3 fixed effects, no interactions
+egg16 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg17 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg18 <- glmer(nEggs.t ~ SocTreat + WingAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg19 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg20 <- glmer(nEggs.t ~ SocTreat + JHIII + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg21 <- glmer(nEggs.t ~ SocTreat + oocAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg22 <- glmer(nEggs.t ~ WingAvg + JHIII + oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg23 <- glmer(nEggs.t ~ WingAvg + JHIII + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg24 <- glmer(nEggs.t ~ WingAvg + oocAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg25 <- glmer(nEggs.t ~ JHIII + oocAvg + DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 4 fixed effects, no interactions
+egg26 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg27 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg28 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg29 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg30 <- glmer(nEggs.t ~ WingAvg + JHIII + oocAvg + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 5 fixed effects, no interactions
+egg31 <- glmer(nEggs.t ~ SocTreat + JHIII + WingAvg + oocAvg + DaysTreat +
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 1 2-way interaction
+egg32 <- glmer(nEggs.t ~ SocTreat*WingAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg33 <- glmer(nEggs.t ~ SocTreat*JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg34 <- glmer(nEggs.t ~ SocTreat*oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg35 <- glmer(nEggs.t ~ SocTreat*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg36 <- glmer(nEggs.t ~ WingAvg*JHIII + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg37 <- glmer(nEggs.t ~ WingAvg*oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg38 <- glmer(nEggs.t ~ WingAvg*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg39 <- glmer(nEggs.t ~ JHIII*oocAvg + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg40 <- glmer(nEggs.t ~ JHIII*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg41 <- glmer(nEggs.t ~ oocAvg*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# 1 3-way interaction
+egg41 <- glmer(nEggs.t ~ SocTreat*oocAvg*DaysTreat + 
+               (1|NatCol), family = poisson(link = "log"), data = lateData)
+# all but one term
+egg42 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat + 
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*oocAvg + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg43 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg44 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg45 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*WingAvg + SocTreat*oocAvg + SocTreat*JHIII + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg46 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*oocAvg + SocTreat*JHIII + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg47 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg +
+                SocTreat*WingAvg + SocTreat*oocAvg + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg48 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg49 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg50 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*oocAvg + SocTreat*JHIII + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg51 <- glmer(nEggs.t ~ WingAvg + JHIII + oocAvg + DaysTreat +
+                oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+# biological predictions
+egg52 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg53 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg54 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg55 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg56 <- glmer(nEggs.t ~ SocTreat + oocAvg + DaysTreat +
+                oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg57 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII +
+                SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg58 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + DaysTreat +
+                SocTreat*oocAvg + oocAvg*DaysTreat + SocTreat*JHIII +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg59 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + DaysTreat +
+                SocTreat*oocAvg + oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg60 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + DaysTreat +
+                SocTreat*oocAvg*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+# full model -1 term
+egg61 <- glmer(nEggs.t ~ WingAvg + JHIII + oocAvg + DaysTreat +
+                DaysTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg62 <- glmer(nEggs.t ~ SocTreat + JHIII + oocAvg + DaysTreat +
+                SocTreat*DaysTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg63 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*DaysTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg64 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + DaysTreat +
+                SocTreat*DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg65 <- glmer(nEggs.t ~ SocTreat + WingAvg + JHIII + oocAvg + 
+                SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg66 <- glmer(nEggs.t ~ SocTreat + JHIII + DaysTreat + SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg67 <- glmer(nEggs.t ~ SocTreat + JHIII + SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg68 <- glmer(nEggs.t ~ SocTreat*JHIII + SocTreat*oocAvg +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg69 <- glmer(nEggs.t ~ SocTreat*JHIII + SocTreat*oocAvg + DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+egg70 <- glmer(nEggs.t ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                (1|NatCol), family = poisson(link = "log"), data = lateData)
+
+# best fit model = lowest AIC value
+# WingAvg has 1 NA value, explaining error "models are not all fitted to the same data"
+modSel <- model.sel(eggNull, eggFull, egg1, egg2, egg3, egg4, egg5, egg6, egg7, egg8, egg9, egg10, egg11, egg12, egg13, egg14, egg15, egg16, egg17, egg18, egg19, egg20, egg21, egg22, egg23, egg24, egg25, egg26, egg27, egg28, egg29, egg30, egg31, egg32, egg33, egg34, egg35, egg36, egg37, egg38, egg39, egg40, egg41, egg42, egg43, egg44, egg45, egg46, egg47, egg48, egg49, egg50, egg51, egg52, egg23, egg54, egg55, egg56, egg57, egg58, egg60, egg61, egg62, egg63, egg64, egg65, egg66, egg67, egg68, egg69, egg70)
+
+modSel
+```
+
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- egg55 # late stage only
+mymodelAll <- egg49 # early and late stage
+
+# summary for best models
+summary(mymodel)
+anova(mymodel)
+
+summary(mymodelAll)
+anova(mymodelAll)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+tab_model(mymodelAll)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+plot(allEffects(mymodelAll))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+```

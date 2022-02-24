@@ -1,0 +1,143 @@
+---
+title: "btMortality"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r, include = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(survminer)
+library(survival)
+library(MuMIn)
+library(multcomp)
+library(readr)
+library(tidyr)
+library(dplyr)
+```
+
+# import data from cleanData file
+```{r}
+# assumes working directory is where the cleanBT datasheet (output from cleanData.Rmd file) lives# getwd()
+btData <- read.csv("./clean2.csv", header = TRUE)
+btData
+
+# make social treatment a factor with ordered levels
+btData$socTreat <- factor(btData$socTreat, levels = c("Solitary", "Social")) 
+```
+
+# reformat data to use with surv function in survival analysis
+```{r}
+# remove NA values (including culled bees)
+mort <- btData[!is.na(btData$daysToDeath),]
+
+# count sample size
+sampleSizes <- mort %>% group_by(history, socTreat) %>% tally()
+sampleSizes
+
+# make days to death numeric
+mort$daysToDeath <- as.numeric(mort$daysToDeath)
+# select only relevent rows
+mort <- select(mort, nestID, qNatCol, socTreat, history, nest, daysToDeath)
+# new column for unique nest identifier (since nestID is repeated across first and second nests)
+mort$ID <- 1:nrow(mort)
+# new column for death status
+mort$death <- NA
+# new column for timepoint
+mort$timepoint <- NA
+
+# reformat the data as timepoints, where timepoints bin the 60 days into nTimepoints (i.e. one per day, 5 day bins, 10 day bins, etc.)
+# first make empty survival dataframe with same column names as mort
+surv <- data.frame(matrix(NA, ncol = ncol(mort)))
+names(surv) <- names(mort)
+
+# then duplicate the data times nTimepoints and enter the proper death code (0 for alive or 1 for dead) at each timepoint
+for (i in 1:(nrow(mort))) {               # APPLY THIS TO EVERY ROW (i.e. every nest)
+  nTimepoints <- 60                       # specify the number of timepoints to split into
+  binSize <- 60/nTimepoints               # calculate the length of each time point (/60 b/c the experiment was 60 days long)
+  for (j in 1:nTimepoints) {              # REPLICATE EACH NEST ROW FOR EVERY TIMEPOINT  
+    col_num <- (i-1) * nTimepoints + j + 1# define surv col_num
+                                          # +i-1: subtract 1 from i (row of mort) to only count completed nests (not the current nest loop)
+                                          # *nTimepoints: multiply by nTimepoints to count all the rows for completed nests*timepoints 
+                                          # (nests*timepoints = rows in surv from previous nest runs of this loop)
+                                          # +j: add j (number of rows that have been added to surv for the current nest loop) 
+                                          # +1: add 1 to skip the NA row created in the surv empty df
+    surv <- rbind(surv, mort[i,])         # add that mort row [a specific nest] to the bottom of the surv df
+    surv[col_num, "timepoint"] <- j*binSize             # add the timepoint label to that row 
+    surv$daysToDeath <- as.numeric(surv$daysToDeath)    # make daysToDeath numeric to use < == operators below
+    if (surv[col_num, "daysToDeath"] < j*binSize) {     # SPECIFY DEATH STATUS AT EACH TIMEPOINT
+      surv[col_num, "death"] <- 1         # death = 1 if it died before or on that timepoint day
+    } else if (surv[col_num, "daysToDeath"] == 60) {
+      surv[col_num, "death"] <- 0         # death = 0 if it survived to day 60
+      } else {
+        surv[col_num, "death"] <- 0       # death = 0 if it was still alive on that timepoint day
+        }
+  }
+}
+
+# remove the first row of all NAs
+surv <- surv[!is.na(surv$nestID),] 
+surv
+
+```
+
+# survival analyses
+```{r}
+# make fixed effects factors
+surv$socTreat <- as.factor(surv$socTreat)
+surv$history <- as.factor(surv$history)
+surv$nest <- as.factor(surv$nest)
+
+# create response variable of survival information
+s <- Surv(time = surv$timepoint, event = surv$death)
+s
+```
+# mixed models
+```{r}
+library(coxme)
+
+mNull <- coxme(s ~ 1 + (1|qNatCol) + (1|nestID), data = surv)
+mFull <- coxme(s ~ nest * socTreat * history + (1|qNatCol) + (1|nestID), data = surv)
+# only 1
+m1 <- coxme(s ~ nest + (1|qNatCol) + (1|nestID), data = surv)
+m2 <- coxme(s ~ socTreat + (1|qNatCol) + (1|nestID), data = surv)
+m3 <- coxme(s ~ history + (1|qNatCol) + (1|nestID), data = surv)
+# only 2 with interaction
+m4 <- coxme(s ~ nest * socTreat + (1|qNatCol) + (1|nestID), data = surv)
+m5 <- coxme(s ~ nest * history + (1|qNatCol) + (1|nestID), data = surv)
+m6 <- coxme(s ~ socTreat * history + (1|qNatCol) + (1|nestID), data = surv)
+# only 2 without interactions
+m7 <- coxme(s ~ nest + socTreat + (1|qNatCol) + (1|nestID), data = surv)
+m8 <- coxme(s ~ nest + history + (1|qNatCol) + (1|nestID), data = surv)
+m9 <- coxme(s ~ socTreat + history + (1|qNatCol) + (1|nestID), data = surv)
+# all 3 without interactions
+m10 <- coxme(s ~ nest + socTreat + history + (1|qNatCol) + (1|nestID), data = surv)
+# all 3 with only 1 interaction
+m11 <- coxme(s ~ nest * socTreat + history + (1|qNatCol) + (1|nestID), data = surv)
+m12 <- coxme(s ~ nest + socTreat * history + (1|qNatCol) + (1|nestID), data = surv)
+m13 <- coxme(s ~ nest * history + socTreat + (1|qNatCol) + (1|nestID), data = surv)
+
+model.sel(mNull, m1, m2, m3, m4, m6, m7, m9)
+```
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- m7
+
+# summary for best model
+anova(mymodel)
+```
+
+### plot it
+```{r}
+fit <- survfit(Surv(daysToDeath) ~ socTreat,
+               data = mort)
+ggsurvplot(fit, data = mort,
+           legend.labs = c("Solitary", "Social"),
+           linetype = c("solid", "dotted"),
+           palette = c("black", "black"))
+```

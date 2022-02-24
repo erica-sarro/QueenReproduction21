@@ -1,0 +1,419 @@
+---
+title: "JH"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE}
+# load packages
+
+library(tidyverse)
+library(plyr)
+library(reshape2)
+library(lme4)
+```
+
+# import data from cleanData file
+```{r, echo = FALSE}
+# assumes working directory is where the clean1 datasheet (output from exp1clean.Rmd file) lives
+getwd()
+jhData <- read.csv("./clean1.csv", header = TRUE)
+
+# remove JHIII na values
+jhData <- jhData[!is.na(jhData$JHIII),]
+
+# make social treatment a factor so it creates 2 distinct groups (rather than scale from 0-1)
+jhData$SocTreat <- factor(jhData$SocTreat, levels = c("solitary", "social"))
+# make DaysTreat a factor
+jhData$DaysTreat <- as.factor(jhData$DaysTreat)
+
+# count sample size
+jhSampleSizes <- jhData %>% group_by(RelDayTreat, SocTreat) %>% tally()
+jhSampleSizes
+```
+
+# visualize data
+## jh titer
+## solid line = solitary
+## dotted line = social
+```{r, warning = FALSE, error = FALSE, message = FALSE, echo = FALSE}
+
+# rename the data i want to graph
+plotData <- jhData
+
+# summarize the data and calculate mean, sd, sem
+summ <- ddply(plotData, 
+                c("RelDayTreat", "SocTreat", "RelTreat"), 
+                summarise,
+                mean = mean(JHIII), 
+                sd = sd(JHIII),
+                sem = sd(JHIII)/sqrt(length(JHIII)))
+
+# add rows with no data for social day 1 groups to make space in graph
+addTimeGap <- data.frame(matrix(nrow = 1, ncol = ncol(summ)))
+colnames(addTimeGap) <- colnames(summ)
+addTimeGap$RelDayTreat <- "0 gas 9"
+summ <- rbind(summ, addTimeGap)
+
+# split summ into lines
+natural <- summ[c(1, 2, 4, 6, 8, 10),]
+natural$RelDayTreat <- as.character(natural$RelDayTreat)
+natural <- natural[order(natural$RelDayTreat),]
+natural$RelDayTreat <- as.factor(natural$RelDayTreat)
+premature <- summ[c(1, 3, 5, 11),]
+premature$RelDayTreat <- as.character(premature$RelDayTreat)
+premature <- premature[order(premature$RelDayTreat),]
+premature$RelDayTreat <- as.factor(premature$RelDayTreat)
+delayed <- summ[c(1, 2, 4, 6, 7, 9),]
+delayed$RelDayTreat <- as.character(delayed$RelDayTreat)
+delayed <- delayed[order(delayed$RelDayTreat),]
+delayed$RelDayTreat <- as.factor(delayed$RelDayTreat)
+delayed
+
+ggplot() +
+  geom_line(data = natural, aes(x = RelDayTreat, y = mean, group = 1), linetype = "dotted") +
+  geom_point(data = natural, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = premature, aes(x = RelDayTreat, y = mean, group = 2), linetype = "dotted") +
+  geom_point(data = premature, aes(x = RelDayTreat, y = mean)) +
+  geom_line(data = delayed, aes(x = RelDayTreat, y = mean, group = 3)) +
+  geom_point(data = delayed, aes(x = RelDayTreat, y = mean)) +
+  geom_errorbar(data = summ, aes(x = RelDayTreat, y = mean, fill = SocTreat, ymin = mean - sem, ymax = mean + sem),
+                #position = position_dodge(.2),
+                width = 0.1) +
+  theme(text = element_text(size=15),
+        #axis.text.x = element_text(angle = 90),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  scale_x_discrete(labels=c("1", "4\nearly", "7", "//", "1", "4\nlate", "7")) + 
+  labs(x = "collection day at each nest stage", y = "hemolymph JH-III titer (ng ml-1)")
+```
+
+### add oocAvg to use as covariate
+```{r, echo = FALSE}
+# average the oocyte lengths for each bee 
+for (i in 1:nrow(jhData)) {
+  jhData$oocAvg[i] <- mean(c(jhData$Ooc11[i],
+                              jhData$Ooc12[i],
+                              jhData$Ooc13[i],
+                              jhData$Ooc14[i],
+                              jhData$Ooc21[i],
+                              jhData$Ooc22[i],
+                              jhData$Ooc23[i],
+                              jhData$Ooc24[i]),
+                              na.rm = TRUE) }
+```
+
+# mixed models
+```{r, include = FALSE}
+library(ggpubr) 
+library(lme4)
+library(car)
+library(MuMIn)
+library(lsmeans)
+library(MASS)
+library(multcomp)
+library(sjPlot)
+library(effects)
+```
+
+## decide on a distribution
+### my data is not normal, lnorm fits best
+```{r, echo = FALSE}
+# look at the data's distribution
+ggdensity(jhData$JHIII)
+hist(jhData$JHIII)
+
+# add one to data so that all values are nonzero
+jhData$JHIII.t <- jhData$JHIII + 1
+
+# normal distribution
+qqp(jhData$JHIII.t, "norm")
+
+# lnorm means lognormal
+qqp(jhData$JHIII.t, "lnorm")
+
+# log transform JHIII values b/c lognormal fits best
+jhData$JHIII.l <- log(jhData$JHIII.t)
+
+# normal distribution on the log transformed data
+qqp(jhData$JHIII.t, "norm")
+
+###################################################################################
+
+# plot the social treatments separately to verify they still fit lnorm
+
+# subset the data into social and solitary
+jhsoc <- jhData[jhData$SocTreat == "social",]
+jhsol <- jhData[jhData$SocTreat == "solitary",]
+
+# lnorm
+# lnorm still looks good
+qqp(jhsoc$JHIII.t, "lnorm")
+qqp(jhsol$JHIII.t, "lnorm")
+```
+
+### find best model
+lnorm distribution, continuous variable
+```{r}
+# null
+jhNull <- glmer(JHIII.l ~ 1 + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# full
+jhFull <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat + 
+                  SocTreat*DaysTreat*RelTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 1 fixed effect, no interactions
+jh1 <- glmer(JHIII.l ~ SocTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh2 <- glmer(JHIII.l ~ WingAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh3 <- glmer(JHIII.l ~ oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh4 <- glmer(JHIII.l ~ RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh5 <- glmer(JHIII.l ~ DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 2 fixed effects, no interactions
+jh6 <- glmer(JHIII.l ~ SocTreat + WingAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh7 <- glmer(JHIII.l ~ SocTreat + oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh8 <- glmer(JHIII.l ~ SocTreat + RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh9 <- glmer(JHIII.l ~ SocTreat + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh10 <- glmer(JHIII.l ~ WingAvg + oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh11 <- glmer(JHIII.l ~ WingAvg + RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh12 <- glmer(JHIII.l ~ WingAvg + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh13 <- glmer(JHIII.l ~ oocAvg + RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh14 <- glmer(JHIII.l ~ oocAvg + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh15 <- glmer(JHIII.l ~ RelTreat + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 3 fixed effects, no interactions
+jh16 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh17 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh18 <- glmer(JHIII.l ~ SocTreat + WingAvg + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh19 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh20 <- glmer(JHIII.l ~ SocTreat + oocAvg + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh21 <- glmer(JHIII.l ~ SocTreat + RelTreat + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh22 <- glmer(JHIII.l ~ WingAvg + oocAvg + RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh23 <- glmer(JHIII.l ~ WingAvg + oocAvg + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh24 <- glmer(JHIII.l ~ WingAvg + RelTreat + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh25 <- glmer(JHIII.l ~ oocAvg + RelTreat + DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 4 fixed effects, no interactions
+jh26 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh27 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh28 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh29 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh30 <- glmer(JHIII.l ~ WingAvg + oocAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 5 fixed effects, no interactions
+jh31 <- glmer(JHIII.l ~ SocTreat + oocAvg + WingAvg + RelTreat + DaysTreat +
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 1 2-way interaction
+jh32 <- glmer(JHIII.l ~ SocTreat*WingAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh33 <- glmer(JHIII.l ~ SocTreat*oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh34 <- glmer(JHIII.l ~ SocTreat*RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh35 <- glmer(JHIII.l ~ SocTreat*DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh36 <- glmer(JHIII.l ~ WingAvg*oocAvg + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh37 <- glmer(JHIII.l ~ WingAvg*RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh38 <- glmer(JHIII.l ~ WingAvg*DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh39 <- glmer(JHIII.l ~ oocAvg*RelTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh40 <- glmer(JHIII.l ~ oocAvg*DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh41 <- glmer(JHIII.l ~ RelTreat*DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# 1 3-way interaction
+jh41 <- glmer(JHIII.l ~ SocTreat*RelTreat*DaysTreat + 
+               (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# all but one term
+jh42 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat + 
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*oocAvg +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh43 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh44 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*oocAvg + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh45 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*oocAvg + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh46 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*oocAvg + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh47 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat +
+                SocTreat*WingAvg + SocTreat*RelTreat + SocTreat*oocAvg +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh48 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*oocAvg +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh49 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*WingAvg + SocTreat*DaysTreat + SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh50 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat + SocTreat*RelTreat + SocTreat*oocAvg + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh51 <- glmer(JHIII.l ~ WingAvg + oocAvg + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# biological predictions
+jh52 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh53 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh54 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh55 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh56 <- glmer(JHIII.l ~ SocTreat + RelTreat + DaysTreat +
+                RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh57 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh58 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat + SocTreat*oocAvg +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh59 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat + RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh60 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + DaysTreat +
+                SocTreat*RelTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+# full model -1 term
+jh61 <- glmer(JHIII.l ~ WingAvg + oocAvg + RelTreat + DaysTreat +
+                DaysTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh62 <- glmer(JHIII.l ~ SocTreat + oocAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh63 <- glmer(JHIII.l ~ SocTreat + WingAvg + RelTreat + DaysTreat +
+                SocTreat*DaysTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh64 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + DaysTreat +
+                SocTreat*DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh65 <- glmer(JHIII.l ~ SocTreat + WingAvg + oocAvg + RelTreat + 
+                SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh66 <- glmer(JHIII.l ~ SocTreat + oocAvg + DaysTreat + SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh67 <- glmer(JHIII.l ~ SocTreat + oocAvg + SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh68 <- glmer(JHIII.l ~ SocTreat*oocAvg + SocTreat*RelTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+jh69 <- glmer(JHIII.l ~ SocTreat*oocAvg + SocTreat*RelTreat + DaysTreat +
+                (1|NatCol), family = gaussian(link = "log"), data = jhData)
+
+# best fit model = lowest AIC value
+# WingAvg has 1 NA value, explaining error "models are not all fitted to the same data"
+modSel <- model.sel(jhNull, jhFull, jh1, jh2, jh3, jh4, jh5, jh6, jh7, jh8, jh9, jh10, jh11, jh12, jh13, jh14, jh15, jh16, jh17, jh18, jh19, jh20, jh21, jh22, jh23, jh24, jh25, jh26, jh27, jh28, jh29, jh30, jh31, jh32, jh33, jh34, jh35, jh36, jh37, jh38, jh39, jh40, jh41, jh42, jh43, jh44, jh45, jh46, jh47, jh48, jh49, jh50, jh51, jh52, jh23, jh54, jh55, jh56, jh57, jh58, jh60, jh61, jh62, jh63, jh64, jh65, jh66, jh67, jh68, jh69)
+model.sel(jhNull)
+
+modSel
+```
+
+### summarize the model, overall p values
+```{r}
+# identify best model that does not produce an error message
+mymodel <- jh67
+
+# summary for best model
+summary(mymodel)
+anova(mymodel)
+
+# view estimates, confidence intervals, and p-values for model fixed and random effects
+tab_model(mymodel)
+
+# plot effects details to visualize results
+plot(allEffects(mymodel))
+```
+
+### considerations
+```{r}
+# plot residuals
+modelResiduals <- resid(mymodel, type = "pearson") # Extract standardized residuals
+hist(modelResiduals)
+qqp(modelResiduals, "norm")
+
+# check for singularity
+isSingular(mymodel)
+
+# check for collinearity - value over 4ish signifies multicollinear, problematic, and potentially redundent
+vif(mymodel)
+```
+
+### pairwise comparisons & p-values
+```{r}
+# posthoc tukey's test comparing of social-solitary queens within each collection stage
+posthoc3 <- lsmeans(mymodel, pairwise ~ SocTreat|RelTreat, adjust = "tukey")
+summary(posthoc3)
+
+# remaining tests use Bonferonni-corrected Wilcoxon rank sum tests
+# because data is not normally distributed
+
+# compare JH among solitary queens only
+# multiply p-values by 12 to get Bonferonni-corrected values
+jhSol <- jhData[jhData$SocTreat == "solitary",]
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 1"], jhSol$JHIII[jhSol$RelDayTreat=="gas 4"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 1"], jhSol$JHIII[jhSol$RelDayTreat=="gas 7"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 1"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 1"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 1"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 4"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 1"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 7"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 4"], jhSol$JHIII[jhSol$RelDayTreat=="gas 7"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 7"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 1"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 7"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 4"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="gas 7"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 7"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="offspring 1"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 4"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="offspring 1"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 7"])
+wilcox.test(jhSol$JHIII[jhSol$RelDayTreat=="offspring 4"], jhSol$JHIII[jhSol$RelDayTreat=="offspring 7"])
+
+# pairwise social vs. solitary at each collection day
+# multiply p-values by 4 to get Bonferonni-corrected values
+jhEarly4 <- jhData[jhData$RelDayTreat == "gas 4",]
+jhEarly7 <- jhData[jhData$RelDayTreat == "gas 7",]
+jhLate4 <- jhData[jhData$RelDayTreat == "offspring 4",]
+jhLate7 <- jhData[jhData$RelDayTreat == "offspring 7",]
+wilcox.test(jhEarly4$JHIII[jhEarly4$SocTreat=="solitary"], jhEarly4$JHIII[jhEarly4$SocTreat=="social"])
+wilcox.test(jhEarly7$JHIII[jhEarly7$SocTreat=="solitary"], jhEarly7$JHIII[jhEarly7$SocTreat=="social"])
+wilcox.test(jhLate4$JHIII[jhLate4$SocTreat=="solitary"], jhLate4$JHIII[jhLate4$SocTreat=="social"])
+wilcox.test(jhLate7$JHIII[jhLate7$SocTreat=="solitary"], jhLate7$JHIII[jhLate7$SocTreat=="social"])
+```
