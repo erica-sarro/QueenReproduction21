@@ -16,8 +16,7 @@ library(ggplot2)
 
 # import all data
 ```{r}
-# assumes working directory is where the original datasheet lives
-allData <- read.csv("experiment1data.csv", 
+allData <- read.csv("./data/experiment1data.csv", 
                     header = TRUE,
                     na.strings = c("", " ", "na", "NA"))
 allData
